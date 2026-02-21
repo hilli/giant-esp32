@@ -13,16 +13,55 @@ Inspired by [JamieMagee/specialized-turbo](https://github.com/JamieMagee/special
 
 ## Quick Start
 
+### Prerequisites
+
 ```bash
-# Install PlatformIO CLI (if not already installed)
+# Install PlatformIO CLI
 pip install platformio
+```
 
-# Build
+### Build
+
+```bash
 pio run -e esp32s3
+```
 
-# Flash + monitor
+### Flash to ESP32-S3
+
+1. Connect the ESP32-S3 via USB
+2. If it's a new board, you may need to hold the **BOOT** button while pressing **RESET** to enter download mode
+3. Flash the firmware:
+
+```bash
+pio run -e esp32s3 -t upload
+```
+
+PlatformIO auto-detects the serial port. If it doesn't, specify it:
+
+```bash
+pio run -e esp32s3 -t upload --upload-port /dev/cu.usbmodem*
+```
+
+### Monitor Serial Output
+
+```bash
+pio device monitor
+```
+
+Or build, flash, and monitor in one go:
+
+```bash
 pio run -e esp32s3 -t upload && pio device monitor
 ```
+
+### Troubleshooting
+
+- **Port not found**: Check `ls /dev/cu.usb*` — ESP32-S3 often shows as `/dev/cu.usbmodem*`
+- **Upload fails**: Hold **BOOT**, press **RESET**, release **BOOT**, then retry upload
+- **PlatformIO mirror blocked**: If `eu2.contabostorage.com` is blocked by your network, run:
+  ```bash
+  pio settings set enable_proxy_strict_ssl false
+  ```
 
 ## Usage (Phase 1 — BLE Explorer)
 
