@@ -84,6 +84,17 @@ void WebServer::setupRoutes() {
         serializeJson(doc, json);
         request->send(200, "application/json", json);
     });
+
+    m_server.on("/api/giant/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleGiantStatus(request);
+    });
+
+    m_server.on("/api/giant/command", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            handleGiantCommand(request, data, len, index, total);
+        });
 }
 
 void WebServer::handleStatus(AsyncWebServerRequest* request) {
@@ -278,9 +289,98 @@ void WebServer::loop() {
             m_explorer.subscribeToNotifications();
             sendEvent("subscribed", "{}");
             break;
+        case PendingOp::GIANT_CMD: {
+            String cmdName(m_pendingGiantCmd);
+            bool ok = false;
+            if (m_giantBike && m_giantBike->isInitialized()) {
+                GiantCommand gcmd;
+                bool known = true;
+                if (cmdName == "connect") gcmd = CONNECT_GEV;
+                else if (cmdName == "disconnect") gcmd = DISCONNECT_GEV;
+                else if (cmdName == "riding") gcmd = READ_RIDING_DATA;
+                else if (cmdName == "factory") gcmd = READ_FACTORY_DATA;
+                else if (cmdName == "tuning") gcmd = READ_TUNING_DATA;
+                else if (cmdName == "light") gcmd = TRIGGER_LIGHT;
+                else if (cmdName == "assist_up") gcmd = TRIGGER_ASSIST_UP;
+                else if (cmdName == "assist_down") gcmd = TRIGGER_ASSIST_DOWN;
+                else if (cmdName == "power") gcmd = TRIGGER_POWER;
+                else if (cmdName == "range") gcmd = READ_REMAINING_RANGE;
+                else known = false;
+
+                if (known) {
+                    ok = m_giantBike->sendCommand(gcmd);
+                }
+            }
+            String result = "{\"type\":\"giant_cmd_result\",\"cmd\":\"" + cmdName + "\",\"success\":" + (ok ? "true" : "false") + "}";
+            m_ws.textAll(result);
+            break;
+        }
         default:
             break;
     }
+}
+
+void WebServer::handleGiantStatus(AsyncWebServerRequest* request) {
+    JsonDocument doc;
+    if (!m_giantBike || !m_giantBike->isInitialized()) {
+        doc["initialized"] = false;
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+        return;
+    }
+    doc["initialized"] = true;
+    GevRideData ride = m_giantBike->getRideData();
+    JsonObject r = doc["ride"].to<JsonObject>();
+    r["speed"] = ride.speed;
+    r["crank"] = ride.crank;
+    r["torque"] = ride.torque;
+    r["watt"] = ride.watt;
+    r["rsoc"] = ride.rsoc;
+    r["distance"] = ride.currentRidingDistance;
+    r["time"] = ride.currentRidingTime;
+    r["range"] = ride.carr;
+    r["errorCode"] = ride.errorCode;
+
+    GevBikeData bike = m_giantBike->getBikeData();
+    JsonObject b = doc["bike"].to<JsonObject>();
+    b["odo"] = bike.odo;
+    b["epCapacity"] = bike.epPercentageCapacity;
+    b["epLife"] = bike.epPercentageLife;
+    b["rcUiFw"] = bike.rideControlUIFwVer;
+    b["duFw"] = bike.syncDriveDuFwVersion;
+    b["epFw"] = bike.epVersion;
+    b["duType"] = bike.duType;
+
+    GevFactoryData factory = m_giantBike->getFactoryData();
+    JsonObject f = doc["factory"].to<JsonObject>();
+    f["frameNumber"] = factory.frameNumber;
+    f["rcHwVersion"] = factory.rcHwVersion;
+    f["rcType"] = factory.rcType;
+
+    String json;
+    serializeJson(doc, json);
+    request->send(200, "application/json", json);
+}
+
+void WebServer::handleGiantCommand(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+    String body;
+    for (size_t i = 0; i < len; i++) body += (char)data[i];
+
+    JsonDocument doc;
+    if (deserializeJson(doc, body)) {
+        request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+        return;
+    }
+    const char* cmd = doc["cmd"];
+    if (!cmd) {
+        request->send(400, "application/json", "{\"error\":\"Missing cmd\"}");
+        return;
+    }
+    strncpy(m_pendingGiantCmd, cmd, sizeof(m_pendingGiantCmd) - 1);
+    m_pendingGiantCmd[sizeof(m_pendingGiantCmd) - 1] = '\0';
+    m_pendingOp.store((int)PendingOp::GIANT_CMD, std::memory_order_release);
+    request->send(200, "application/json", "{\"status\":\"queued\",\"cmd\":\"" + String(cmd) + "\"}");
 }
 
 void WebServer::addScannedDevice(const NimBLEAdvertisedDevice& device) {

@@ -14,9 +14,11 @@
 #include "credentials.h"
 #include "ble_explorer.h"
 #include "web_server.h"
+#include "giant_protocol.h"
 
 BLEExplorer explorer;
 WebServer webServer(explorer);
+GiantBike* giantBike = nullptr;
 
 // Track the best candidate during scanning
 NimBLEAddress targetAddress;
@@ -70,9 +72,34 @@ class MyCallbacks : public BLEExplorerCallbacks {
     void onConnected(NimBLEClient* client) override {
         webServer.sendEvent("connected", "{\"address\":\"" +
             String(client->getPeerAddress().toString().c_str()) + "\"}");
+
+        // Check for Giant GEV service and initialize protocol
+        NimBLERemoteService* gevSvc = client->getService(GEV_SERVICE_UUID);
+        if (gevSvc) {
+            Serial.println("[GEV] Giant E-Bike service found, initializing protocol...");
+            if (giantBike) {
+                webServer.setGiantBike(nullptr);
+                delete giantBike;
+            }
+            giantBike = new GiantBike(client);
+            if (giantBike->init()) {
+                webServer.setGiantBike(giantBike);
+                Serial.println("[GEV] Protocol ready via web UI");
+            } else {
+                Serial.println("[GEV] Protocol init failed");
+                delete giantBike;
+                giantBike = nullptr;
+            }
+        }
     }
 
     void onDisconnected(NimBLEClient* client, int reason) override {
+        if (giantBike) {
+            webServer.setGiantBike(nullptr);
+            delete giantBike;
+            giantBike = nullptr;
+            Serial.println("[GEV] Giant bike disconnected, cleaned up");
+        }
         webServer.sendEvent("disconnected", "{\"reason\":" + String(reason) + "}");
     }
 

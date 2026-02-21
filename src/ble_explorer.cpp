@@ -8,8 +8,8 @@ BLEExplorer::BLEExplorer() {
 
 void BLEExplorer::init() {
     NimBLEDevice::init("GiantExplorer");
-    NimBLEDevice::setSecurityAuth(true, true, true); // bonding, MITM, SC
-    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_KEYBOARD_DISPLAY);
+    NimBLEDevice::setSecurityAuth(true, false, true); // bonding, no MITM (Just Works), SC
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
     m_scan = NimBLEDevice::getScan();
     m_scan->setScanCallbacks(&m_scanCallbacks);
     m_scan->setActiveScan(true);

@@ -68,6 +68,73 @@ h2{color:#8b949e;font-size:1em;margin:16px 0 8px}
 <h2>Live Log</h2>
 <div class="log" id="log"></div>
 
+<h2 onclick="document.getElementById('giantSection').style.display=document.getElementById('giantSection').style.display==='none'?'block':'none'" style="cursor:pointer">&#x1f6b2; Giant E-Bike <span style="font-size:.7em;color:#8b949e">&#x25BC;</span></h2>
+<div id="giantSection">
+  <div class="status-bar" style="margin-bottom:12px">
+    <span><span class="dot off" id="dotGev"></span>GEV: <span id="gevStatus">not initialized</span></span>
+  </div>
+  <div id="gevDashboard" style="display:none">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div class="device-list" style="text-align:center;padding:16px;margin:0">
+        <div style="font-size:2.2em;color:#58a6ff;font-weight:700" id="gevSpeed">0.0</div>
+        <div style="color:#8b949e;font-size:.85em">km/h</div>
+      </div>
+      <div class="device-list" style="text-align:center;padding:16px;margin:0">
+        <div style="font-size:2.2em;color:#3fb950;font-weight:700" id="gevBatt">0<span style="font-size:.5em">%</span></div>
+        <div style="background:#21262d;border-radius:4px;height:8px;margin-top:4px"><div id="gevBattBar" style="background:#3fb950;height:100%;border-radius:4px;width:0%;transition:width .3s"></div></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+      <div class="device-list" style="text-align:center;margin:0;padding:10px">
+        <div style="color:#d2a8ff;font-size:1.3em;font-weight:600" id="gevWatt">0</div>
+        <div style="color:#8b949e;font-size:.75em">Watts</div>
+      </div>
+      <div class="device-list" style="text-align:center;margin:0;padding:10px">
+        <div style="color:#f0883e;font-size:1.3em;font-weight:600" id="gevCadence">0</div>
+        <div style="color:#8b949e;font-size:.75em">RPM</div>
+      </div>
+      <div class="device-list" style="text-align:center;margin:0;padding:10px">
+        <div style="color:#79c0ff;font-size:1.3em;font-weight:600" id="gevTorque">0</div>
+        <div style="color:#8b949e;font-size:.75em">Nm</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+      <div class="device-list" style="text-align:center;margin:0;padding:10px">
+        <div style="color:#c9d1d9;font-size:1.1em" id="gevDist">0.0</div>
+        <div style="color:#8b949e;font-size:.75em">km</div>
+      </div>
+      <div class="device-list" style="text-align:center;margin:0;padding:10px">
+        <div style="color:#c9d1d9;font-size:1.1em" id="gevTime">00:00</div>
+        <div style="color:#8b949e;font-size:.75em">Ride Time</div>
+      </div>
+      <div class="device-list" style="text-align:center;margin:0;padding:10px">
+        <div style="color:#c9d1d9;font-size:1.1em" id="gevRange">—</div>
+        <div style="color:#8b949e;font-size:.75em">Range km</div>
+      </div>
+    </div>
+  </div>
+  <div class="controls" style="flex-wrap:wrap">
+    <button class="btn primary" onclick="gevCmd('connect')">&#x1f50c; Connect GEV</button>
+    <button class="btn" onclick="gevCmd('riding')">&#x1f4ca; Read Data</button>
+    <button class="btn" onclick="gevCmd('light')">&#x1f4a1; Light</button>
+    <button class="btn" onclick="gevCmd('assist_up')">&#x2b06; Assist</button>
+    <button class="btn" onclick="gevCmd('assist_down')">&#x2b07; Assist</button>
+    <button class="btn" onclick="gevCmd('power')">&#x26a1; Power</button>
+    <button class="btn" onclick="gevCmd('range')">&#x1f4cf; Range</button>
+    <button class="btn" onclick="gevCmd('factory')">&#x1f3ed; Factory</button>
+    <button class="btn danger" onclick="gevCmd('disconnect')">Disconnect GEV</button>
+  </div>
+  <div id="gevFactory" class="device-list" style="display:none;margin-top:8px">
+    <div style="font-weight:600;color:#d2a8ff;margin-bottom:6px">Factory Info</div>
+    <div style="font-size:.85em;color:#8b949e">Frame: <span id="gevFrame" style="color:#c9d1d9">—</span></div>
+    <div style="font-size:.85em;color:#8b949e">RC Type: <span id="gevRcType" style="color:#c9d1d9">—</span></div>
+    <div style="font-size:.85em;color:#8b949e">RC HW: <span id="gevRcHw" style="color:#c9d1d9">—</span></div>
+    <div style="font-size:.85em;color:#8b949e">DU FW: <span id="gevDuFw" style="color:#c9d1d9">—</span></div>
+    <div style="font-size:.85em;color:#8b949e">EP FW: <span id="gevEpFw" style="color:#c9d1d9">—</span></div>
+    <div style="font-size:.85em;color:#8b949e">ODO: <span id="gevOdo" style="color:#c9d1d9">—</span> km</div>
+  </div>
+</div>
+
 <script>
 let ws;
 function initWS(){
@@ -85,6 +152,7 @@ function initWS(){
       else if(msg.event==='subscribed') log('Subscribed to notifications','info');
       else if(msg.event==='status') log(msg.data.message,'info');
       else if(msg.event==='error') log(msg.data.message,'err');
+      else if(msg.type==='giant_cmd_result'){log('GEV '+msg.cmd+': '+(msg.success?'OK':'FAIL'),msg.success?'info':'err');setTimeout(gevPoll,500);if(!gevPollTimer)gevPollTimer=setInterval(gevPoll,2000)}
       else log(JSON.stringify(msg),'info');
     }catch(err){log(e.data,'info')}
   };
@@ -189,8 +257,58 @@ async function loadServices(){
   });
 }
 
+function gevCmd(cmd){
+  fetch('/api/giant/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cmd:cmd})})
+    .then(r=>r.json()).then(d=>log('GEV cmd: '+cmd+' → '+d.status,'info'))
+    .catch(e=>log('GEV error: '+e,'err'));
+}
+
+let gevPollTimer=null;
+function gevUpdateDashboard(d){
+  if(!d.initialized){
+    document.getElementById('dotGev').className='dot off';
+    document.getElementById('gevStatus').textContent='not initialized';
+    document.getElementById('gevDashboard').style.display='none';
+    if(gevPollTimer){clearInterval(gevPollTimer);gevPollTimer=null}
+    return;
+  }
+  document.getElementById('dotGev').className='dot on';
+  document.getElementById('gevStatus').textContent='connected';
+  document.getElementById('gevDashboard').style.display='block';
+  if(d.ride){
+    document.getElementById('gevSpeed').textContent=d.ride.speed.toFixed(1);
+    document.getElementById('gevBatt').innerHTML=d.ride.rsoc+'<span style="font-size:.5em">%</span>';
+    document.getElementById('gevBattBar').style.width=d.ride.rsoc+'%';
+    document.getElementById('gevBattBar').style.background=d.ride.rsoc>20?'#3fb950':'#f85149';
+    document.getElementById('gevWatt').textContent=d.ride.watt.toFixed(0);
+    document.getElementById('gevCadence').textContent=d.ride.crank.toFixed(0);
+    document.getElementById('gevTorque').textContent=d.ride.torque.toFixed(1);
+    document.getElementById('gevDist').textContent=d.ride.distance.toFixed(1);
+    const m=Math.floor(d.ride.time/60),s=d.ride.time%60;
+    document.getElementById('gevTime').textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+    document.getElementById('gevRange').textContent=d.ride.range>0?d.ride.range:'—';
+  }
+  if(d.factory&&d.factory.frameNumber){
+    document.getElementById('gevFactory').style.display='block';
+    document.getElementById('gevFrame').textContent=d.factory.frameNumber||'—';
+    document.getElementById('gevRcType').textContent=d.factory.rcType||'—';
+    document.getElementById('gevRcHw').textContent=d.factory.rcHwVersion||'—';
+  }
+  if(d.bike){
+    document.getElementById('gevDuFw').textContent=d.bike.duFw||'—';
+    document.getElementById('gevEpFw').textContent=d.bike.epFw||'—';
+    document.getElementById('gevOdo').textContent=d.bike.odo>0?d.bike.odo:'—';
+  }
+}
+
+async function gevPoll(){
+  const d=await api('giant/status');
+  if(d) gevUpdateDashboard(d);
+}
+
 initWS();
 updateStatus();
+gevPoll();
 setInterval(updateStatus,5000);
 </script>
 </body>
