@@ -1,20 +1,22 @@
 // Giant E-Bike BLE Explorer
 // Phase 1: Generic BLE GATT scanner/explorer for ESP32-S3
+// Phase 2: Web UI for full browser-based control
 //
 // Usage:
 //   1. Flash to ESP32-S3, open Serial Monitor at 115200
-//   2. Scans for all BLE devices and prints info
-//   3. Send 'c XX:XX:XX:XX:XX:XX' via Serial to connect to a device
-//   4. Send 's' to start a new scan
-//   5. Send 'd' to disconnect
-//   6. Send 'r' to re-read all characteristics
-//   7. Send 'n' to subscribe to all notifications
+//   2. ESP32 connects to WiFi and starts a web server
+//   3. Open the IP address shown in Serial Monitor in a browser
+//   4. Serial commands still work: s=scan, c=connect, d=disconnect, r=read, n=notify, h=help
 
 #include <Arduino.h>
+#include <esp_task_wdt.h>
 #include "config.h"
+#include "credentials.h"
 #include "ble_explorer.h"
+#include "web_server.h"
 
 BLEExplorer explorer;
+WebServer webServer(explorer);
 
 // Track the best candidate during scanning
 NimBLEAddress targetAddress;
@@ -22,12 +24,30 @@ bool targetFound = false;
 
 class MyCallbacks : public BLEExplorerCallbacks {
     void onDeviceFound(const NimBLEAdvertisedDevice& device) override {
+        // Store device with correct address type for later connection
+        webServer.addScannedDevice(device);
+
+        // Send to WebSocket
+        String json = "{\"address\":\"" + String(device.getAddress().toString().c_str()) + "\"";
+        json += ",\"name\":\"" + String(device.getName().c_str()) + "\"";
+        json += ",\"rssi\":" + String(device.getRSSI());
+        if (device.haveServiceUUID()) {
+            json += ",\"services\":\"";
+            for (int i = 0; i < device.getServiceUUIDCount(); i++) {
+                if (i > 0) json += " ";
+                json += device.getServiceUUID(i).toString().c_str();
+            }
+            json += "\"";
+        }
+        json += "}";
+        webServer.sendEvent("scan_result", json);
+
         // Check if this device matches our filter
         String filter = BLE_TARGET_NAME_FILTER;
         String targetAddr = BLE_TARGET_ADDRESS;
 
         if (targetAddr.length() > 0) {
-            if (device.getAddress().toString().c_str() == targetAddr) {
+            if (String(device.getAddress().toString().c_str()) == targetAddr) {
                 targetAddress = device.getAddress();
                 targetFound = true;
                 Serial.printf("[MATCH] Target device found by address: %s\n",
@@ -45,6 +65,33 @@ class MyCallbacks : public BLEExplorerCallbacks {
                               device.getName().c_str());
             }
         }
+    }
+
+    void onConnected(NimBLEClient* client) override {
+        webServer.sendEvent("connected", "{\"address\":\"" +
+            String(client->getPeerAddress().toString().c_str()) + "\"}");
+    }
+
+    void onDisconnected(NimBLEClient* client, int reason) override {
+        webServer.sendEvent("disconnected", "{\"reason\":" + String(reason) + "}");
+    }
+
+    void onNotification(NimBLERemoteCharacteristic* chr, uint8_t* data, size_t length) override {
+        String hex;
+        for (size_t i = 0; i < length; i++) {
+            char buf[4];
+            snprintf(buf, sizeof(buf), "%02x ", data[i]);
+            hex += buf;
+        }
+        hex.trim();
+        String json = "{\"uuid\":\"" + String(chr->getUUID().toString().c_str()) +
+                       "\",\"hex\":\"" + hex +
+                       "\",\"length\":" + String(length) + "}";
+        webServer.sendEvent("notification", json);
+    }
+
+    void onScanEnd(uint32_t count) override {
+        webServer.sendEvent("scan_end", "{\"count\":" + String(count) + "}");
     }
 };
 
@@ -107,7 +154,7 @@ void processSerialCommand() {
                 Serial.println("[ERR] Usage: c AA:BB:CC:DD:EE:FF");
                 break;
             }
-            NimBLEAddress addr(addrStr.c_str());
+            NimBLEAddress addr(std::string(addrStr.c_str()), 0);
             doConnect(addr);
             break;
         }
@@ -151,15 +198,21 @@ void setup() {
     Serial.begin(SERIAL_BAUD);
     delay(2000); // Give Serial time to connect
 
+    // Disable task watchdog — BLE connect blocks for 10+ seconds
+    esp_task_wdt_deinit();
+
     Serial.println();
     Serial.println("=========================================");
-    Serial.println("  Giant E-Bike BLE Explorer v0.1");
-    Serial.println("  ESP32-S3 + NimBLE");
+    Serial.println("  Giant E-Bike BLE Explorer v0.2");
+    Serial.println("  ESP32-S3 + NimBLE + Web UI");
     Serial.println("=========================================");
     Serial.println();
 
     explorer.setCallbacks(&callbacks);
     explorer.init();
+
+    // Start WiFi + Web Server
+    webServer.begin(WIFI_SSID, WIFI_PASSWORD);
 
     printHelp();
 
@@ -170,6 +223,7 @@ void setup() {
 
 void loop() {
     processSerialCommand();
+    webServer.loop();
 
     // Auto-connect if target found during scan
     if (targetFound && !explorer.isConnected() && !explorer.isScanning() && BLE_AUTO_CONNECT) {

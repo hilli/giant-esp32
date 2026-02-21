@@ -38,13 +38,19 @@ bool BLEExplorer::isScanning() const {
 bool BLEExplorer::connectToDevice(const NimBLEAddress& address) {
     Serial.printf("[BLE] Connecting to %s...\n", address.toString().c_str());
 
-    m_client = NimBLEDevice::createClient(address);
+    // Reuse existing client or create a new one
+    m_client = NimBLEDevice::getClientByPeerAddress(address);
+    if (!m_client) {
+        m_client = NimBLEDevice::getDisconnectedClient();
+    }
+    if (!m_client) {
+        m_client = NimBLEDevice::createClient();
+    }
     m_client->setClientCallbacks(&m_clientCallbacks);
     m_client->setConnectTimeout(10);
 
-    if (!m_client->connect()) {
+    if (!m_client->connect(address)) {
         Serial.println("[BLE] Connection failed");
-        NimBLEDevice::deleteClient(m_client);
         m_client = nullptr;
         return false;
     }
@@ -68,22 +74,21 @@ bool BLEExplorer::discoverServices() {
     if (!isConnected()) return false;
 
     Serial.println("[BLE] Discovering services...");
-    auto services = m_client->getServices(true);
-    if (!services) {
+    const auto& services = m_client->getServices(true);
+    if (services.empty()) {
         Serial.println("[BLE] Service discovery failed");
         return false;
     }
 
-    Serial.printf("[BLE] Found %u services\n", (unsigned)services->size());
+    Serial.printf("[BLE] Found %u services\n", (unsigned)services.size());
 
-    for (auto* svc : *services) {
+    for (auto* svc : services) {
         Serial.printf("\n[SVC] UUID: %s\n", svc->getUUID().toString().c_str());
         if (m_callbacks) m_callbacks->onServiceDiscovered(svc);
 
-        auto chars = svc->getCharacteristics(true);
-        if (!chars) continue;
+        const auto& chars = svc->getCharacteristics(true);
 
-        for (auto* chr : *chars) {
+        for (auto* chr : chars) {
             String props = "";
             if (chr->canRead())      props += "READ ";
             if (chr->canWrite())     props += "WRITE ";
@@ -118,9 +123,9 @@ bool BLEExplorer::discoverServices() {
             }
 
             // Enumerate descriptors
-            auto descs = chr->getDescriptors(true);
-            if (descs) {
-                for (auto* desc : *descs) {
+            const auto& descs = chr->getDescriptors(true);
+            {
+                for (auto* desc : descs) {
                     Serial.printf("    [DSC] UUID: %s\n", desc->getUUID().toString().c_str());
                 }
             }
@@ -138,14 +143,13 @@ bool BLEExplorer::subscribeToNotifications() {
     Serial.println("\n[BLE] Subscribing to all notify-capable characteristics...");
     int count = 0;
 
-    auto services = m_client->getServices(false);
-    if (!services) return false;
+    const auto& services = m_client->getServices(false);
+    if (services.empty()) return false;
 
-    for (auto* svc : *services) {
-        auto chars = svc->getCharacteristics(false);
-        if (!chars) continue;
+    for (auto* svc : services) {
+        const auto& chars = svc->getCharacteristics(false);
 
-        for (auto* chr : *chars) {
+        for (auto* chr : chars) {
             if (chr->canNotify()) {
                 if (chr->subscribe(true, notifyCallback)) {
                     Serial.printf("[SUB] Subscribed to %s (service %s)\n",
@@ -172,11 +176,9 @@ bool BLEExplorer::subscribeToNotifications() {
 }
 
 const std::vector<NimBLERemoteService*>& BLEExplorer::getServices() const {
-    static std::vector<NimBLERemoteService*> empty;
+    static const std::vector<NimBLERemoteService*> empty;
     if (!m_client) return empty;
-    auto* svcs = m_client->getServices(false);
-    if (!svcs) return empty;
-    return *svcs;
+    return m_client->getServices(false);
 }
 
 // --- Notification callback ---
@@ -241,6 +243,7 @@ void BLEExplorer::ScanCallbacks::onResult(const NimBLEAdvertisedDevice* advertis
 void BLEExplorer::ScanCallbacks::onScanEnd(const NimBLEScanResults& results, int reason) {
     Serial.printf("[SCAN] Scan ended. Found %u devices. Reason: %d\n",
                   (unsigned)results.getCount(), reason);
+    if (m_parent->m_callbacks) m_parent->m_callbacks->onScanEnd(results.getCount());
 }
 
 // --- Client callbacks ---

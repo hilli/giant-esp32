@@ -12,6 +12,7 @@ public:
     virtual void onServiceDiscovered(NimBLERemoteService* service) {}
     virtual void onCharacteristicDiscovered(NimBLERemoteCharacteristic* chr) {}
     virtual void onNotification(NimBLERemoteCharacteristic* chr, uint8_t* data, size_t length) {}
+    virtual void onScanEnd(uint32_t count) {}
 };
 
 class BLEExplorer {
