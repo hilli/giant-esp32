@@ -103,7 +103,6 @@ void WebServer::handleScan(AsyncWebServerRequest* request) {
         request->send(400, "application/json", "{\"error\":\"Disconnect first\"}");
         return;
     }
-    m_devices.clear();
     uint32_t duration = 10;
     if (request->hasParam("duration")) {
         duration = request->getParam("duration")->value().toInt();
