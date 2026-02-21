@@ -6,6 +6,7 @@
 #include <atomic>
 #include "ble_explorer.h"
 #include "giant_protocol.h"
+#include "ride_logger.h"
 
 class WebServer {
 public:
@@ -59,6 +60,10 @@ public:
     // Giant bike integration
     void setGiantBike(GiantBike* bike) { m_giantBike = bike; }
 
+    // Ride logger integration
+    void setRideLogger(RideLogger* logger) { m_rideLogger = logger; }
+
 private:
     GiantBike* m_giantBike = nullptr;
+    RideLogger* m_rideLogger = nullptr;
 };

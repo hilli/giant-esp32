@@ -135,6 +135,22 @@ h2{color:#8b949e;font-size:1em;margin:16px 0 8px}
   </div>
 </div>
 
+<h2 onclick="document.getElementById('loggerSection').style.display=document.getElementById('loggerSection').style.display==='none'?'block':'none'" style="cursor:pointer">&#x1f4be; Ride Logger <span style="font-size:.7em;color:#8b949e">&#x25BC;</span></h2>
+<div id="loggerSection">
+  <div class="status-bar" style="margin-bottom:12px">
+    <span><span class="dot off" id="dotRec"></span><span id="recStatus">Idle</span></span>
+    <span>Storage: <span id="storageUsed">—</span></span>
+  </div>
+  <div class="controls">
+    <button class="btn primary" id="btnRecStart" onclick="rideLogStart()">&#x23FA; Start Recording</button>
+    <button class="btn danger" id="btnRecStop" onclick="rideLogStop()" disabled>&#x23F9; Stop</button>
+    <button class="btn" onclick="rideLogRefresh()">&#x1f504; Refresh</button>
+  </div>
+  <div id="rideList" class="device-list" style="margin-top:8px">
+    <span class="log-info">No rides yet.</span>
+  </div>
+</div>
+
 <script>
 let ws;
 function initWS(){
@@ -309,7 +325,47 @@ async function gevPoll(){
 initWS();
 updateStatus();
 gevPoll();
+rideLogRefresh();
 setInterval(updateStatus,5000);
+
+async function rideLogRefresh(){
+  const d=await api('rides');
+  if(!d)return;
+  document.getElementById('storageUsed').textContent=(d.usedKB||0)+'/'+(d.totalKB||0)+' KB';
+  const logging=d.logging;
+  document.getElementById('dotRec').className='dot '+(logging?'on':'off');
+  document.getElementById('recStatus').textContent=logging?'Recording: '+d.currentFile:'Idle';
+  document.getElementById('btnRecStart').disabled=logging;
+  document.getElementById('btnRecStop').disabled=!logging;
+  const el=document.getElementById('rideList');
+  if(!d.rides||d.rides.length===0){el.innerHTML='<span class="log-info">No rides yet.</span>';return}
+  el.innerHTML='';
+  d.rides.forEach(r=>{
+    const div=document.createElement('div');
+    div.className='device';
+    const sizeKB=(r.size/1024).toFixed(1);
+    div.innerHTML=`<div class="device-info"><div class="device-name">${r.file}</div><div class="device-addr">${r.samples} samples &middot; ${sizeKB} KB</div></div><div style="display:flex;gap:6px"><a class="btn" href="/api/rides/download?file=${encodeURIComponent(r.file)}" download>&#x1f4e5; Download</a><button class="btn danger" onclick="rideLogDelete('${r.file}')">&#x1f5d1;</button></div>`;
+    el.appendChild(div);
+  });
+}
+
+async function rideLogStart(){
+  await api('rides/start',{method:'POST'});
+  log('Recording started','info');
+  rideLogRefresh();
+}
+
+async function rideLogStop(){
+  await api('rides/stop',{method:'POST'});
+  log('Recording stopped','info');
+  rideLogRefresh();
+}
+
+async function rideLogDelete(file){
+  if(!confirm('Delete '+file+'?'))return;
+  await fetch('/api/rides/delete?file='+encodeURIComponent(file),{method:'DELETE'});
+  rideLogRefresh();
+}
 </script>
 </body>
 </html>

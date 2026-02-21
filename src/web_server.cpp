@@ -95,6 +95,60 @@ void WebServer::setupRoutes() {
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
             handleGiantCommand(request, data, len, index, total);
         });
+
+    // Ride logger routes
+    m_server.on("/api/rides", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!m_rideLogger) { request->send(500, "application/json", "{\"error\":\"No logger\"}"); return; }
+        JsonDocument doc;
+        doc["logging"] = m_rideLogger->isLogging();
+        doc["currentFile"] = m_rideLogger->currentRideFile();
+        doc["totalKB"] = m_rideLogger->totalBytes() / 1024;
+        doc["usedKB"] = m_rideLogger->usedBytes() / 1024;
+        JsonArray arr = doc["rides"].to<JsonArray>();
+        auto rides = m_rideLogger->listRides();
+        for (const auto& r : rides) {
+            JsonObject o = arr.add<JsonObject>();
+            o["file"] = r.filename;
+            o["size"] = r.size;
+            o["samples"] = r.samples;
+        }
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    m_server.on("/api/rides/start", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!m_rideLogger) { request->send(500, "application/json", "{\"error\":\"No logger\"}"); return; }
+        bool ok = m_rideLogger->start();
+        request->send(200, "application/json", ok ? "{\"status\":\"recording\"}" : "{\"error\":\"Failed to start\"}");
+    });
+
+    m_server.on("/api/rides/stop", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!m_rideLogger) { request->send(500, "application/json", "{\"error\":\"No logger\"}"); return; }
+        m_rideLogger->stop();
+        request->send(200, "application/json", "{\"status\":\"stopped\"}");
+    });
+
+    m_server.on("/api/rides/download", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!request->hasParam("file")) { request->send(400, "application/json", "{\"error\":\"Missing file param\"}"); return; }
+        String filename = request->getParam("file")->value();
+        // Sanitize: strip path separators
+        filename.replace("/", "");
+        filename.replace("..", "");
+        String path = String(RideLogger::RIDE_DIR) + "/" + filename;
+        if (!LittleFS.exists(path)) { request->send(404, "application/json", "{\"error\":\"Not found\"}"); return; }
+        request->send(LittleFS, path, "text/csv", true);  // true = download
+    });
+
+    m_server.on("/api/rides/delete", HTTP_DELETE, [this](AsyncWebServerRequest* request) {
+        if (!m_rideLogger) { request->send(500, "application/json", "{\"error\":\"No logger\"}"); return; }
+        if (!request->hasParam("file")) { request->send(400, "application/json", "{\"error\":\"Missing file param\"}"); return; }
+        String filename = request->getParam("file")->value();
+        filename.replace("/", "");
+        filename.replace("..", "");
+        bool ok = m_rideLogger->deleteRide(filename);
+        request->send(200, "application/json", ok ? "{\"status\":\"deleted\"}" : "{\"error\":\"Delete failed\"}");
+    });
 }
 
 void WebServer::handleStatus(AsyncWebServerRequest* request) {

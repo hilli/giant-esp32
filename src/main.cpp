@@ -15,10 +15,12 @@
 #include "ble_explorer.h"
 #include "web_server.h"
 #include "giant_protocol.h"
+#include "ride_logger.h"
 
 BLEExplorer explorer;
 WebServer webServer(explorer);
 GiantBike* giantBike = nullptr;
+RideLogger rideLogger;
 
 // Track the best candidate during scanning
 NimBLEAddress targetAddress;
@@ -241,6 +243,11 @@ void setup() {
     // Start WiFi + Web Server
     webServer.begin(WIFI_SSID, WIFI_PASSWORD);
 
+    // Sync time via NTP and init ride logger
+    RideLogger::syncNTP();
+    rideLogger.init();
+    webServer.setRideLogger(&rideLogger);
+
     printHelp();
 
     // Auto-start scan
@@ -251,6 +258,7 @@ void setup() {
 void loop() {
     processSerialCommand();
     webServer.loop();
+    rideLogger.loop(giantBike);
 
     // Auto-connect if target found during scan
     if (targetFound && !explorer.isConnected() && !explorer.isScanning() && BLE_AUTO_CONNECT) {
