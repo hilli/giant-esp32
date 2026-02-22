@@ -344,7 +344,7 @@ async function rideLogRefresh(){
     const div=document.createElement('div');
     div.className='device';
     const sizeKB=(r.size/1024).toFixed(1);
-    div.innerHTML=`<div class="device-info"><div class="device-name">${r.file}</div><div class="device-addr">${r.samples} samples &middot; ${sizeKB} KB</div></div><div style="display:flex;gap:6px"><a class="btn" href="/api/rides/download?file=${encodeURIComponent(r.file)}" download>&#x1f4e5; Download</a><button class="btn danger" onclick="rideLogDelete('${r.file}')">&#x1f5d1;</button></div>`;
+    div.innerHTML=`<div class="device-info"><div class="device-name">${r.file}</div><div class="device-addr">${r.samples} samples &middot; ${sizeKB} KB</div></div><div style="display:flex;gap:6px"><a class="btn" href="/api/rides/download?file=${encodeURIComponent(r.file)}" download="${r.file}">&#x1f4e5; Download</a><button class="btn danger" onclick="rideLogDelete('${r.file}')">&#x1f5d1;</button></div>`;
     el.appendChild(div);
   });
 }

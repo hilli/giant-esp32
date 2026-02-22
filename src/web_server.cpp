@@ -137,7 +137,9 @@ void WebServer::setupRoutes() {
         filename.replace("..", "");
         String path = String(RideLogger::RIDE_DIR) + "/" + filename;
         if (!LittleFS.exists(path)) { request->send(404, "application/json", "{\"error\":\"Not found\"}"); return; }
-        request->send(LittleFS, path, "text/csv", true);  // true = download
+        AsyncWebServerResponse* response = request->beginResponse(LittleFS, path, "text/csv");
+        response->addHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+        request->send(response);
     });
 
     m_server.on("/api/rides/delete", HTTP_DELETE, [this](AsyncWebServerRequest* request) {
