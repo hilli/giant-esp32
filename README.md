@@ -13,6 +13,8 @@ Inspired by [JamieMagee/specialized-turbo](https://github.com/JamieMagee/special
 - **Bike Controls** — Toggle light, adjust assist level, read factory/diagnostic info
 - **Ride Logger** — Record ride data to flash storage (LittleFS) as CSV, download when home via WiFi
 
+![Current quick'n'dirty UI](screenshot.png)
+
 ## Hardware
 
 - **Board**: ESP32-S3-WROOM-1 (any ESP32-S3 dev board)
