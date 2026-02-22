@@ -1,0 +1,44 @@
+# https://taskfile.dev
+version: "3"
+
+vars:
+  ENV: esp32s3
+  UPLOAD_PORT: /dev/cu.usbserial-410
+  BAUD: 115200
+
+tasks:
+  default:
+    desc: Build firmware
+    cmds:
+      - pio run -e {{.ENV}}
+
+  build:
+    desc: Build firmware
+    cmds:
+      - pio run -e {{.ENV}}
+
+  flash:
+    desc: Build and flash firmware to ESP32
+    cmds:
+      - pio run -e {{.ENV}} -t upload --upload-port {{.UPLOAD_PORT}}
+
+  monitor:
+    desc: Open serial monitor
+    cmds:
+      - pio device monitor --port {{.UPLOAD_PORT}} --baud {{.BAUD}}
+
+  deploy:
+    desc: Build, flash, and open serial monitor
+    cmds:
+      - task: flash
+      - task: monitor
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - pio run -e {{.ENV}} -t clean
+
+  devices:
+    desc: List connected serial devices
+    cmds:
+      - ls /dev/cu.usb*
