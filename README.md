@@ -1,46 +1,54 @@
-# Giant E-Bike BLE Explorer & Charge Monitor
+# Giant E-Bike BLE Explorer
 
-ESP32-S3 firmware to communicate with Giant e-bikes (Stormguard E+ 2 and similar models with Smart Gateway) over Bluetooth Low Energy.
-
-**Status**: Phase 1 — BLE GATT Explorer (generic scanner/explorer, works with any BLE device)
+ESP32-S3 firmware to communicate with Giant e-bikes (Stormguard E+ 2 and similar models) over Bluetooth Low Energy. Includes a browser-based dashboard for live ride monitoring, bike control, and ride logging.
 
 Inspired by [JamieMagee/specialized-turbo](https://github.com/JamieMagee/specialized-turbo) and [Sepp62/LevoEsp32Ble](https://github.com/Sepp62/LevoEsp32Ble).
+
+## Features
+
+- **BLE Scanner & Explorer** — Scan, connect, and browse GATT services/characteristics of any BLE device
+- **Giant RideControl+ Protocol** — Full implementation of the GEV BLE protocol (AES-128-ECB encrypted commands), reverse-engineered from the official Android app
+- **WiFi Web Server** — Browser-based SPA dashboard accessible over your local network
+- **Live Ride Dashboard** — Real-time speed, power, cadence, torque, battery, distance, and ride time
+- **Bike Controls** — Toggle light, adjust assist level, read factory/diagnostic info
+- **Ride Logger** — Record ride data to flash storage (LittleFS) as CSV, download when home via WiFi
 
 ## Hardware
 
 - **Board**: ESP32-S3-WROOM-1 (any ESP32-S3 dev board)
-- **Target bike**: Giant Stormguard E+ 2 (2023) with Smart Gateway (Nordic nRF52832)
+- **Target bike**: Giant Stormguard E+ 2 (2023) or similar Giant e-bikes with RideControl+
 
 ## Quick Start
 
 ### Prerequisites
 
 ```bash
-# Install PlatformIO CLI
 pip install platformio
 ```
 
-### Build
+### Configure WiFi
 
-```bash
-pio run -e esp32s3
+Create `src/credentials.h` (gitignored):
+
+```cpp
+#pragma once
+#define WIFI_SSID "YourSSID"
+#define WIFI_PASSWORD "YourPassword"
 ```
 
-### Flash to ESP32-S3
-
-1. Connect the ESP32-S3 via USB
-2. If it's a new board, you may need to hold the **BOOT** button while pressing **RESET** to enter download mode
-3. Flash the firmware:
+### Build & Flash
 
 ```bash
 pio run -e esp32s3 -t upload
 ```
 
-PlatformIO auto-detects the serial port. If it doesn't, specify it:
+If the port isn't auto-detected:
 
 ```bash
-pio run -e esp32s3 -t upload --upload-port /dev/cu.usbmodem*
+pio run -e esp32s3 -t upload --upload-port /dev/cu.usbserial-*
 ```
+
+> **Tip**: If upload fails, hold **BOOT**, press **RESET**, release **BOOT**, then retry.
 
 ### Monitor Serial Output
 
@@ -48,60 +56,75 @@ pio run -e esp32s3 -t upload --upload-port /dev/cu.usbmodem*
 pio device monitor
 ```
 
-Or build, flash, and monitor in one go:
+## Usage
 
-```bash
-pio run -e esp32s3 -t upload && pio device monitor
-```
+### Web Interface
 
-### Troubleshooting
+After flashing, the ESP32 connects to WiFi and prints its IP address to serial. Open that IP in a browser to access the dashboard.
 
-- **Port not found**: Check `ls /dev/cu.usb*` — ESP32-S3 often shows as `/dev/cu.usbmodem*`
-- **Upload fails**: Hold **BOOT**, press **RESET**, release **BOOT**, then retry upload
-- **PlatformIO mirror blocked**: If `eu2.contabostorage.com` is blocked by your network, run:
-  ```bash
-  pio settings set enable_proxy_strict_ssl false
-  ```
+**BLE Explorer tab:**
+- Scan for nearby BLE devices
+- Connect to any device and browse its GATT services
+- Subscribe to notifications
 
-## Usage (Phase 1 — BLE Explorer)
+**Giant E-Bike tab:**
+- Auto-detects Giant GEV service on connect
+- Live dashboard: speed, battery, watts, cadence, torque, distance, ride time, range
+- Controls: light toggle, assist up/down, power, read factory data
 
-1. Flash to ESP32-S3
-2. Open Serial Monitor at 115200 baud
-3. The device auto-scans for BLE devices on boot
-4. Use Serial commands to interact:
+**Ride Logger tab:**
+- Start/stop recording ride data
+- Samples every 2 seconds: speed, cadence, torque, watts, battery%, distance, time, range
+- Data stored as CSV on flash (1.5 MB available, persists across reboots)
+- Download ride files via browser when back on WiFi
+- NTP-synced timestamps
+
+### Serial Commands
 
 | Command | Description |
 |---------|-------------|
-| `s` | Start a new BLE scan |
-| `c AA:BB:CC:DD:EE:FF` | Connect to a device by address |
+| `s` | Start BLE scan |
+| `c AA:BB:CC:DD:EE:FF` | Connect to a device |
 | `d` | Disconnect |
-| `r` | Re-discover and read all services/characteristics |
+| `r` | Re-discover services |
 | `n` | Subscribe to all notifications |
 | `h` | Show help |
 
 ### Filtering
 
-Edit `src/config.h` to set a name filter (e.g., `"Giant"`) or target address. When a filter is set, the explorer auto-connects to the first matching device.
+Edit `src/config.h` to auto-connect to a specific device by name or MAC address.
 
-### Output
+## Giant GEV Protocol
 
-The explorer prints detailed GATT information:
+The Giant protocol uses a custom GATT service with AES-128-ECB encrypted commands:
 
-```
-[SCAN] AA:BB:CC:DD:EE:FF | RSSI: -45 | Name: "Giant SG"
-[BLE] Connected! MTU: 256
-[SVC] UUID: 0x180f (Battery Service)
-  [CHR] UUID: 0x2a19  Props: READ NOTIFY
-  [CHR]   Value (1 bytes): 64  (100%)
-[NTF] 0x2a19 (1 bytes): 64
-```
+| UUID | Role |
+|------|------|
+| `4D500001-...` | Service |
+| `4D500002-...` | Write (commands) |
+| `4D500003-...` | Notify (responses) |
 
-## Project Phases
+Each packet is 18 bytes: `[0x21 header][16 AES-encrypted bytes][CRC]`. The protocol supports reading ride telemetry, factory data, diagnostics, and triggering bike controls (light, assist, power).
 
-1. **BLE GATT Explorer** ✅ — Generic BLE scanner, connect, enumerate, subscribe
-2. **Protocol Discovery** 🔜 — Run against Giant bike, document protocol in `docs/protocol.md`
-3. **Battery Monitor** — Subscribe to battery, HTTP POST to NATS webhook on charge complete
-4. **Polish** — WiFiManager, LED, deep sleep, OTA
+Protocol details were reverse-engineered from the [RideControl+ Android app](https://play.google.com/store/apps/details?id=com.giant.ridecontrolapp).
+
+## REST API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/status` | GET | WiFi/BLE status, heap |
+| `/api/scan` | GET | Start BLE scan |
+| `/api/devices` | GET | List discovered devices |
+| `/api/connect` | POST | Connect to device `{"address":"..."}` |
+| `/api/disconnect` | POST | Disconnect |
+| `/api/services` | GET | List GATT services |
+| `/api/giant/status` | GET | Ride/bike/factory data |
+| `/api/giant/command` | POST | Send command `{"cmd":"riding"}` |
+| `/api/rides` | GET | List recorded rides |
+| `/api/rides/start` | POST | Start recording |
+| `/api/rides/stop` | POST | Stop recording |
+| `/api/rides/download?file=X` | GET | Download ride CSV |
+| `/api/rides/delete?file=X` | DELETE | Delete a ride |
 
 ## References
 
