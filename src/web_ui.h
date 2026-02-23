@@ -151,6 +151,48 @@ h2{color:#8b949e;font-size:1em;margin:16px 0 8px}
   </div>
 </div>
 
+<h2 onclick="document.getElementById('settingsSection').style.display=document.getElementById('settingsSection').style.display==='none'?'block':'none'" style="cursor:pointer">&#x2699; Settings <span style="font-size:.7em;color:#8b949e">&#x25BC;</span></h2>
+<div id="settingsSection" style="display:none">
+  <div class="device-list" style="margin-bottom:12px">
+    <div style="font-weight:600;color:#d2a8ff;margin-bottom:8px">&#x1f514; Webhook Notifications</div>
+    <div style="font-size:.85em;color:#8b949e;margin-bottom:8px">Receive HTTP POST notifications when battery charge state changes.</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="webhookUrl" placeholder="https://example.com/webhook" style="flex:1;padding:6px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:.85em">
+      <button class="btn primary" onclick="saveWebhook()">Save</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="testWebhook()">&#x1f4e4; Test</button>
+      <button class="btn danger" onclick="clearWebhook()">Clear</button>
+      <span id="webhookStatus" style="font-size:.8em;color:#8b949e;align-self:center"></span>
+    </div>
+  </div>
+  <div class="device-list" style="margin-bottom:12px">
+    <div style="font-weight:600;color:#d2a8ff;margin-bottom:8px">&#x1f50b; Charge Monitor</div>
+    <div style="font-size:.85em;color:#8b949e;margin-bottom:8px">Monitor battery while charging and notify via webhook.</div>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <label style="font-size:.85em;display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="chargeEnabled" onchange="saveChargeConfig()" checked> Enabled
+      </label>
+      <label style="font-size:.85em;display:flex;align-items:center;gap:6px">
+        Notify at
+        <input type="number" id="chargeThreshold" value="100" min="10" max="100" step="5" style="width:60px;padding:4px 6px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:.85em">%
+      </label>
+      <button class="btn" onclick="saveChargeConfig()">Save</button>
+    </div>
+    <div class="status-bar" style="margin:0">
+      <span>State: <span id="chargeState" style="color:#58a6ff">—</span></span>
+      <span>Battery: <span id="chargeBatt">—</span></span>
+    </div>
+  </div>
+  <div class="device-list">
+    <div style="font-weight:600;color:#d2a8ff;margin-bottom:8px">&#x1f4f6; Network</div>
+    <div class="status-bar" style="margin:0">
+      <span>Hostname: <span id="netHostname" style="color:#58a6ff">—</span></span>
+      <span>RSSI: <span id="netRssi">—</span></span>
+    </div>
+  </div>
+</div>
+
 <script>
 let ws;
 function initWS(){
@@ -366,6 +408,50 @@ async function rideLogDelete(file){
   await fetch('/api/rides/delete?file='+encodeURIComponent(file),{method:'DELETE'});
   rideLogRefresh();
 }
+
+async function loadWebhookConfig(){
+  const d=await api('webhook/status');
+  if(d) document.getElementById('webhookUrl').value=d.url||'';
+}
+async function saveWebhook(){
+  const url=document.getElementById('webhookUrl').value.trim();
+  if(!url){document.getElementById('webhookStatus').textContent='Enter a URL';return}
+  const r=await api('webhook/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url})});
+  document.getElementById('webhookStatus').textContent=r&&r.status==='saved'?'✓ Saved':'✗ Failed';
+}
+async function testWebhook(){
+  document.getElementById('webhookStatus').textContent='Sending...';
+  const r=await api('webhook/test',{method:'POST'});
+  document.getElementById('webhookStatus').textContent=r&&r.status==='sent'?'✓ Test sent':'✗ '+(r?r.error:'Failed');
+}
+async function clearWebhook(){
+  await api('webhook/clear',{method:'POST'});
+  document.getElementById('webhookUrl').value='';
+  document.getElementById('webhookStatus').textContent='Cleared';
+}
+async function loadChargeStatus(){
+  const d=await api('charge/status');
+  if(!d)return;
+  document.getElementById('chargeState').textContent=d.state||'—';
+  document.getElementById('chargeBatt').textContent=d.battery_pct>=0?d.battery_pct+'%':'—';
+  document.getElementById('chargeEnabled').checked=d.enabled!==false;
+  if(d.threshold) document.getElementById('chargeThreshold').value=d.threshold;
+}
+async function saveChargeConfig(){
+  const enabled=document.getElementById('chargeEnabled').checked;
+  const threshold=parseInt(document.getElementById('chargeThreshold').value)||100;
+  await api('charge/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:enabled,threshold:threshold})});
+}
+async function loadNetworkInfo(){
+  const s=await api('status');
+  if(!s)return;
+  document.getElementById('netHostname').textContent=s.hostname||'—';
+  document.getElementById('netRssi').textContent=s.wifi_rssi?s.wifi_rssi+' dBm':'—';
+}
+loadWebhookConfig();
+loadChargeStatus();
+loadNetworkInfo();
+setInterval(loadChargeStatus,10000);
 </script>
 </body>
 </html>
