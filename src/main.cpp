@@ -17,6 +17,7 @@
 #include "ride_logger.h"
 #include "webhook.h"
 #include "charge_monitor.h"
+#include "status_led.h"
 
 // Optional: compile-time WiFi fallback from credentials.h
 #if __has_include("credentials.h")
@@ -35,6 +36,7 @@ GiantBike* giantBike = nullptr;
 RideLogger rideLogger;
 Webhook webhook;
 ChargeMonitor chargeMonitor(webhook);
+StatusLed statusLed;
 
 // Track the best candidate during scanning
 NimBLEAddress targetAddress;
@@ -86,6 +88,7 @@ class MyCallbacks : public BLEExplorerCallbacks {
     }
 
     void onConnected(NimBLEClient* client) override {
+        statusLed.setState(LedState::CONNECTED);
         webServer.sendEvent("connected", "{\"address\":\"" +
             String(client->getPeerAddress().toString().c_str()) + "\"}");
 
@@ -110,6 +113,7 @@ class MyCallbacks : public BLEExplorerCallbacks {
     }
 
     void onDisconnected(NimBLEClient* client, int reason) override {
+        statusLed.setState(LedState::IDLE);
         if (giantBike) {
             webServer.setGiantBike(nullptr);
             delete giantBike;
@@ -134,6 +138,7 @@ class MyCallbacks : public BLEExplorerCallbacks {
     }
 
     void onScanEnd(uint32_t count) override {
+        statusLed.setState(LedState::IDLE);
         webServer.sendEvent("scan_end", "{\"count\":" + String(count) + "}");
     }
 };
@@ -186,6 +191,7 @@ void processSerialCommand() {
             } else {
                 targetFound = false;
                 explorer.startScan(BLE_SCAN_DURATION);
+                statusLed.setState(LedState::SCANNING);
             }
             break;
 
@@ -244,6 +250,9 @@ void setup() {
     // Disable task watchdog — BLE connect blocks for 10+ seconds
     esp_task_wdt_deinit();
 
+    statusLed.init();
+    statusLed.setState(LedState::BOOT);
+
     Serial.println();
     Serial.println("=========================================");
     Serial.println("  Giant E-Bike BLE Explorer v0.2");
@@ -272,8 +281,10 @@ void setup() {
         // Auto-start scan
         Serial.println("[BLE] Starting initial scan...\n");
         explorer.startScan(BLE_SCAN_DURATION);
+        statusLed.setState(LedState::SCANNING);
     } else {
         Serial.println("[WiFi] In AP mode — configure WiFi via the captive portal");
+        statusLed.setState(LedState::WIFI_AP);
     }
 }
 
@@ -282,6 +293,14 @@ void loop() {
     webServer.loop();
     rideLogger.loop(giantBike);
     chargeMonitor.loop(giantBike);
+    statusLed.loop();
+
+    // Update LED for recording state
+    if (rideLogger.isLogging() && statusLed.getState() != LedState::RECORDING) {
+        statusLed.setState(LedState::RECORDING);
+    } else if (!rideLogger.isLogging() && statusLed.getState() == LedState::RECORDING) {
+        statusLed.setState(explorer.isConnected() ? LedState::CONNECTED : LedState::IDLE);
+    }
 
     // Auto-connect if target found during scan
     if (targetFound && !explorer.isConnected() && !explorer.isScanning() && BLE_AUTO_CONNECT) {

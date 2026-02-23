@@ -6,27 +6,28 @@ vars:
   UPLOAD_PORT: /dev/cu.usbserial-410
   BAUD: 115200
   OTA_HOST: giant-esp32.local
+  PIO: '{{.PIO | default "~/.platformio/penv/bin/pio"}}'
 
 tasks:
   default:
     desc: Build firmware
     cmds:
-      - pio run -e {{.ENV}}
+      - '{{.PIO}} run -e {{.ENV}}'
 
   build:
     desc: Build firmware
     cmds:
-      - pio run -e {{.ENV}}
+      - '{{.PIO}} run -e {{.ENV}}'
 
   flash:
     desc: Build and flash firmware to ESP32
     cmds:
-      - pio run -e {{.ENV}} -t upload --upload-port {{.UPLOAD_PORT}}
+      - '{{.PIO}} run -e {{.ENV}} -t upload --upload-port {{.UPLOAD_PORT}}'
 
   monitor:
     desc: Open serial monitor
     cmds:
-      - pio device monitor --port {{.UPLOAD_PORT}} --baud {{.BAUD}}
+      - '{{.PIO}} device monitor --port {{.UPLOAD_PORT}} --baud {{.BAUD}}'
 
   deploy:
     desc: Build, flash, and open serial monitor
@@ -37,7 +38,7 @@ tasks:
   clean:
     desc: Clean build artifacts
     cmds:
-      - pio run -e {{.ENV}} -t clean
+      - '{{.PIO}} run -e {{.ENV}} -t clean'
 
   devices:
     desc: List connected serial devices
@@ -47,4 +48,4 @@ tasks:
   ota:
     desc: Build and flash firmware over WiFi (OTA)
     cmds:
-      - pio run -e {{.ENV}} -t upload --upload-port {{.OTA_HOST}}
+      - '{{.PIO}} run -e {{.ENV}} -t upload --upload-port {{.OTA_HOST}}'
