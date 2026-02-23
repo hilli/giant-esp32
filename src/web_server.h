@@ -8,6 +8,8 @@
 #include "giant_protocol.h"
 #include "ride_logger.h"
 #include "wifi_manager.h"
+#include "webhook.h"
+#include "charge_monitor.h"
 
 class WebServer {
 public:
@@ -67,8 +69,14 @@ public:
     // Ride logger integration
     void setRideLogger(RideLogger* logger) { m_rideLogger = logger; }
 
+    // Webhook & charge monitor integration
+    void setWebhook(Webhook* hook) { m_webhook = hook; }
+    void setChargeMonitor(ChargeMonitor* monitor) { m_chargeMonitor = monitor; }
+
 private:
     GiantBike* m_giantBike = nullptr;
     RideLogger* m_rideLogger = nullptr;
+    Webhook* m_webhook = nullptr;
+    ChargeMonitor* m_chargeMonitor = nullptr;
     WiFiManager m_wifiManager;
 };

@@ -15,6 +15,8 @@
 #include "web_server.h"
 #include "giant_protocol.h"
 #include "ride_logger.h"
+#include "webhook.h"
+#include "charge_monitor.h"
 
 // Optional: compile-time WiFi fallback from credentials.h
 #if __has_include("credentials.h")
@@ -31,6 +33,8 @@ BLEExplorer explorer;
 WebServer webServer(explorer);
 GiantBike* giantBike = nullptr;
 RideLogger rideLogger;
+Webhook webhook;
+ChargeMonitor chargeMonitor(webhook);
 
 // Track the best candidate during scanning
 NimBLEAddress targetAddress;
@@ -253,11 +257,15 @@ void setup() {
     // Start WiFi + Web Server
     webServer.begin(WIFI_SSID, WIFI_PASSWORD);
 
-    // Only init ride logger and NTP when connected to WiFi
+    // Only init subsystems when connected to WiFi
     if (!webServer.getWiFiManager().isAPMode()) {
         RideLogger::syncNTP();
         rideLogger.init();
         webServer.setRideLogger(&rideLogger);
+
+        webhook.init();
+        webServer.setWebhook(&webhook);
+        webServer.setChargeMonitor(&chargeMonitor);
 
         printHelp();
 
@@ -273,6 +281,7 @@ void loop() {
     processSerialCommand();
     webServer.loop();
     rideLogger.loop(giantBike);
+    chargeMonitor.loop(giantBike);
 
     // Auto-connect if target found during scan
     if (targetFound && !explorer.isConnected() && !explorer.isScanning() && BLE_AUTO_CONNECT) {

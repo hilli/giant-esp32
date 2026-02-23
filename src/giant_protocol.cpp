@@ -136,6 +136,9 @@ bool GiantBike::buildCommand(GiantCommand cmd, uint8_t* packet, size_t& packetLe
         case DIAGNOSTIC_SYNC_DRIVE:
             cmdId = 0x16; keyIndex = 0;
             break;
+        case READ_BATTERY:
+            cmdId = 0x13; keyIndex = 0;  // ACTIVE_DATA_ENERGY_PAK_1
+            break;
         default:
             return false;
     }
@@ -306,6 +309,25 @@ void GiantBike::parseResponse(const uint8_t* d, size_t len) {
         case 0x1D: { // Remaining range
             _rideData.carr = (d[2] << 8) | d[3];
             Serial.printf("[GEV] Remaining range: %d km\n", _rideData.carr);
+            break;
+        }
+
+        case 0x13: { // ACTIVE_DATA_ENERGY_PAK_1 (readBattery response)
+            _bikeData.epPercentageCapacity = d[2] & 0xFF;
+            _bikeData.epPercentageLife = d[3] & 0xFF;
+            float lastChargedCap = ((d[4] << 8) | d[5]) / 10.0f;
+            Serial.printf("[GEV] Battery: cap=%d%%, life=%d%%, lastCharged=%.1fWh\n",
+                          _bikeData.epPercentageCapacity, _bikeData.epPercentageLife, lastChargedCap);
+            break;
+        }
+
+        case 0x0E: { // PASSIVE_DATA_ENERGY_PAK_2
+            _bikeData.epChargeCycles = (d[2] << 8) | d[3];
+            _bikeData.epChargeTimes = (d[4] << 8) | d[5];
+            _bikeData.epPercentageDischarge = d[6];
+            Serial.printf("[GEV] EnergyPak2: cycles=%d, charges=%d, discharge=%d\n",
+                          _bikeData.epChargeCycles, _bikeData.epChargeTimes,
+                          _bikeData.epPercentageDischarge);
             break;
         }
 

@@ -12,6 +12,7 @@ Inspired by [JamieMagee/specialized-turbo](https://github.com/JamieMagee/special
 - **mDNS Discovery** — Access at `http://giant-esp32.local`, no need to find the IP
 - **OTA Updates** — Flash firmware over WiFi after initial USB setup
 - **WiFi Manager** — Captive portal for WiFi setup, credentials stored in NVS, BOOT button to force AP mode
+- **Charge Monitor** — Poll battery while charging, detect state changes, send webhook notifications
 - **Live Ride Dashboard** — Real-time speed, power, cadence, torque, battery, distance, and ride time
 - **Bike Controls** — Toggle light, adjust assist level, read factory/diagnostic info
 - **Ride Logger** — Record ride data to flash storage (LittleFS) as CSV, download when home via WiFi
@@ -150,6 +151,12 @@ Protocol details were reverse-engineered from the [RideControl+ Android app](htt
 | `/api/wifi/config` | POST | Save WiFi credentials `{"ssid":"...","password":"..."}` |
 | `/api/wifi/forget` | POST | Clear saved WiFi credentials |
 | `/api/wifi/scan` | GET | Scan for WiFi networks (AP mode) |
+| `/api/webhook/status` | GET | Webhook configuration status |
+| `/api/webhook/config` | POST | Set webhook URL `{"url":"..."}` |
+| `/api/webhook/test` | POST | Send test webhook |
+| `/api/webhook/clear` | POST | Clear webhook URL |
+| `/api/charge/status` | GET | Charge monitor state and battery % |
+| `/api/charge/config` | POST | Configure monitor `{"enabled":true,"threshold":80}` |
 
 ## References
 

@@ -21,6 +21,8 @@ ESP32-S3 Arduino firmware with four modules orchestrated by `main.cpp`:
 - **WiFiManager** (`wifi_manager.*`) — WiFi connection with NVS credential storage, AP mode fallback with captive portal, BOOT button (GPIO0) override.
 - **WebServer** (`web_server.*`) — ESPAsyncWebServer REST API + WebSocket for live UI updates. Defers all BLE operations to `main loop()` via `std::atomic<int>` flags to avoid blocking the async HTTP task. Serves captive portal in AP mode.
 - **RideLogger** (`ride_logger.*`) — Polling-based CSV ride data recorder on LittleFS (`/rides/` directory). Flushes every 10 samples.
+- **ChargeMonitor** (`charge_monitor.*`) — Polls battery via `READ_BATTERY` command every 30s. State machine (UNKNOWN→CHARGING→CHARGED→NOT_CHARGING) triggers webhook on transitions.
+- **Webhook** (`webhook.*`) — HTTP POST client for notifications. URL stored in NVS. Retries 3 times with backoff.
 
 The web UI is a single-page app embedded as a `PROGMEM` string literal in `web_ui.h`. The captive portal UI is in `portal_ui.h`.
 

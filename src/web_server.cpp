@@ -218,6 +218,75 @@ void WebServer::setupRoutes() {
         m_wifiManager.clearCredentials();
         request->send(200, "application/json", "{\"status\":\"cleared\"}");
     });
+
+    // Webhook routes
+    m_server.on("/api/webhook/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        JsonDocument doc;
+        doc["configured"] = m_webhook && m_webhook->hasUrl();
+        doc["url"] = m_webhook ? m_webhook->getUrl() : "";
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    m_server.on("/api/webhook/config", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (!m_webhook) { request->send(500, "application/json", "{\"error\":\"No webhook\"}"); return; }
+            String body;
+            for (size_t i = 0; i < len; i++) body += (char)data[i];
+            JsonDocument doc;
+            if (deserializeJson(doc, body)) { request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}"); return; }
+            const char* url = doc["url"];
+            if (!url) { request->send(400, "application/json", "{\"error\":\"Missing url\"}"); return; }
+            m_webhook->setUrl(String(url));
+            request->send(200, "application/json", "{\"status\":\"saved\"}");
+        });
+
+    m_server.on("/api/webhook/test", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!m_webhook || !m_webhook->hasUrl()) {
+            request->send(400, "application/json", "{\"error\":\"No webhook URL configured\"}");
+            return;
+        }
+        bool ok = m_webhook->sendTest();
+        request->send(200, "application/json", ok ? "{\"status\":\"sent\"}" : "{\"error\":\"Failed\"}");
+    });
+
+    m_server.on("/api/webhook/clear", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (m_webhook) m_webhook->clearUrl();
+        request->send(200, "application/json", "{\"status\":\"cleared\"}");
+    });
+
+    // Charge monitor routes
+    m_server.on("/api/charge/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        JsonDocument doc;
+        if (m_chargeMonitor) {
+            doc["state"] = ChargeMonitor::stateToString(m_chargeMonitor->getState());
+            doc["battery_pct"] = m_chargeMonitor->getBatteryPct();
+            doc["enabled"] = m_chargeMonitor->isEnabled();
+            doc["threshold"] = m_chargeMonitor->getNotifyThreshold();
+        } else {
+            doc["state"] = "unavailable";
+        }
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    m_server.on("/api/charge/config", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (!m_chargeMonitor) { request->send(500, "application/json", "{\"error\":\"No monitor\"}"); return; }
+            String body;
+            for (size_t i = 0; i < len; i++) body += (char)data[i];
+            JsonDocument doc;
+            if (deserializeJson(doc, body)) { request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}"); return; }
+            if (doc.containsKey("enabled")) m_chargeMonitor->setEnabled(doc["enabled"].as<bool>());
+            if (doc.containsKey("threshold")) m_chargeMonitor->setNotifyThreshold(doc["threshold"].as<int>());
+            request->send(200, "application/json", "{\"status\":\"updated\"}");
+        });
 }
 
 void WebServer::setupPortalRoutes() {
@@ -479,6 +548,7 @@ void WebServer::loop() {
                 else if (cmdName == "assist_down") gcmd = TRIGGER_ASSIST_DOWN;
                 else if (cmdName == "power") gcmd = TRIGGER_POWER;
                 else if (cmdName == "range") gcmd = READ_REMAINING_RANGE;
+                else if (cmdName == "battery") gcmd = READ_BATTERY;
                 else known = false;
 
                 if (known) {
@@ -521,6 +591,9 @@ void WebServer::handleGiantStatus(AsyncWebServerRequest* request) {
     b["odo"] = bike.odo;
     b["epCapacity"] = bike.epPercentageCapacity;
     b["epLife"] = bike.epPercentageLife;
+    b["epDischarge"] = bike.epPercentageDischarge;
+    b["epChargeCycles"] = bike.epChargeCycles;
+    b["epChargeTimes"] = bike.epChargeTimes;
     b["rcUiFw"] = bike.rideControlUIFwVer;
     b["duFw"] = bike.syncDriveDuFwVersion;
     b["epFw"] = bike.epVersion;

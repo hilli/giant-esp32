@@ -19,7 +19,8 @@ enum GiantCommand {
     TRIGGER_POWER,
     DIAGNOSTIC_ENERGY_PAK,
     DIAGNOSTIC_SYNC_DRIVE,
-    READ_REMAINING_RANGE
+    READ_REMAINING_RANGE,
+    READ_BATTERY
 };
 
 struct GevRideData {
@@ -38,6 +39,9 @@ struct GevBikeData {
     int odo = 0;
     int epPercentageCapacity = 0;
     int epPercentageLife = 0;
+    int epPercentageDischarge = -1;  // -1=unknown, 0 likely=charging
+    short epChargeCycles = -1;
+    short epChargeTimes = -1;
     String rideControlUIFwVer;
     String syncDriveDuFwVersion;
     String epVersion;

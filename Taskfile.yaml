@@ -5,6 +5,7 @@ vars:
   ENV: esp32s3
   UPLOAD_PORT: /dev/cu.usbserial-410
   BAUD: 115200
+  OTA_HOST: giant-esp32.local
 
 tasks:
   default:
@@ -42,3 +43,8 @@ tasks:
     desc: List connected serial devices
     cmds:
       - ls /dev/cu.usb*
+
+  ota:
+    desc: Build and flash firmware over WiFi (OTA)
+    cmds:
+      - pio run -e {{.ENV}} -t upload --upload-port {{.OTA_HOST}}
