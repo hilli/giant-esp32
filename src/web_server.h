@@ -7,6 +7,7 @@
 #include "ble_explorer.h"
 #include "giant_protocol.h"
 #include "ride_logger.h"
+#include "wifi_manager.h"
 
 class WebServer {
 public:
@@ -17,9 +18,12 @@ public:
     // Call from loop() to process deferred BLE operations
     void loop();
 
+    // Access the WiFi manager
+    WiFiManager& getWiFiManager() { return m_wifiManager; }
+
 private:
     void setupRoutes();
-    void connectWiFi(const char* ssid, const char* password);
+    void setupPortalRoutes();
 
     // Route handlers
     void handleStatus(AsyncWebServerRequest* request);
@@ -66,4 +70,5 @@ public:
 private:
     GiantBike* m_giantBike = nullptr;
     RideLogger* m_rideLogger = nullptr;
+    WiFiManager m_wifiManager;
 };

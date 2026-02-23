@@ -19,3 +19,6 @@
 
 // Serial baud rate
 #define SERIAL_BAUD 115200
+
+// mDNS hostname — access at http://MDNS_HOSTNAME.local
+#define MDNS_HOSTNAME "giant-esp32"

@@ -1,22 +1,43 @@
 #include "web_server.h"
 #include "web_ui.h"
+#include "portal_ui.h"
+#include <ESPmDNS.h>
+#include <ArduinoOTA.h>
+#include "config.h"
 
 WebServer::WebServer(BLEExplorer& explorer, uint16_t port)
     : m_explorer(explorer), m_server(port), m_ws("/ws") {}
 
-void WebServer::connectWiFi(const char* ssid, const char* password) {
-    Serial.printf("[WiFi] Connecting to %s", ssid);
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.printf("\n[WiFi] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
-}
-
 void WebServer::begin(const char* ssid, const char* password) {
-    connectWiFi(ssid, password);
+    bool connected = m_wifiManager.begin(ssid, password);
+
+    if (connected) {
+        // mDNS — access at http://MDNS_HOSTNAME.local
+        if (MDNS.begin(MDNS_HOSTNAME)) {
+            MDNS.addService("http", "tcp", 80);
+            Serial.printf("[mDNS] Registered: http://%s.local/\n", MDNS_HOSTNAME);
+        } else {
+            Serial.println("[mDNS] Failed to start");
+        }
+
+        // OTA updates
+        ArduinoOTA.setHostname(MDNS_HOSTNAME);
+        ArduinoOTA.onStart([]() { Serial.println("[OTA] Update starting..."); });
+        ArduinoOTA.onEnd([]() { Serial.println("\n[OTA] Update complete, rebooting"); });
+        ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+            Serial.printf("[OTA] %u%%\r", progress * 100 / total);
+        });
+        ArduinoOTA.onError([](ota_error_t error) {
+            Serial.printf("[OTA] Error %u: ", error);
+            if (error == OTA_AUTH_ERROR) Serial.println("Auth failed");
+            else if (error == OTA_BEGIN_ERROR) Serial.println("Begin failed");
+            else if (error == OTA_CONNECT_ERROR) Serial.println("Connect failed");
+            else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive failed");
+            else if (error == OTA_END_ERROR) Serial.println("End failed");
+        });
+        ArduinoOTA.begin();
+        Serial.println("[OTA] Ready");
+    }
 
     m_ws.onEvent([](AsyncWebSocket* server, AsyncWebSocketClient* client,
                     AwsEventType type, void* arg, uint8_t* data, size_t len) {
@@ -28,9 +49,19 @@ void WebServer::begin(const char* ssid, const char* password) {
     });
     m_server.addHandler(&m_ws);
 
-    setupRoutes();
+    if (m_wifiManager.isAPMode()) {
+        setupPortalRoutes();
+    } else {
+        setupRoutes();
+    }
     m_server.begin();
-    Serial.printf("[Web] Server started at http://%s/\n", WiFi.localIP().toString().c_str());
+
+    if (m_wifiManager.isAPMode()) {
+        Serial.printf("[Web] Portal started at http://%s/\n", WiFi.softAPIP().toString().c_str());
+    } else {
+        Serial.printf("[Web] Server started at http://%s/ | http://%s.local/\n",
+                      WiFi.localIP().toString().c_str(), MDNS_HOSTNAME);
+    }
 }
 
 void WebServer::sendEvent(const String& event, const String& data) {
@@ -151,12 +182,95 @@ void WebServer::setupRoutes() {
         serializeJson(doc, json);
         request->send(200, "application/json", json);
     });
+
+    // WiFi management routes
+    m_server.on("/api/wifi/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        JsonDocument doc;
+        doc["mode"] = m_wifiManager.isAPMode() ? "ap" : "sta";
+        doc["ip"] = WiFi.localIP().toString();
+        doc["rssi"] = WiFi.RSSI();
+        doc["hostname"] = String(MDNS_HOSTNAME) + ".local";
+        String ssid, pass;
+        doc["has_saved_credentials"] = m_wifiManager.loadCredentials(ssid, pass);
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    m_server.on("/api/wifi/config", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            String body;
+            for (size_t i = 0; i < len; i++) body += (char)data[i];
+            JsonDocument doc;
+            if (deserializeJson(doc, body)) { request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}"); return; }
+            const char* ssid = doc["ssid"];
+            const char* pass = doc["password"];
+            if (!ssid || strlen(ssid) == 0) { request->send(400, "application/json", "{\"error\":\"Missing ssid\"}"); return; }
+            m_wifiManager.saveCredentials(String(ssid), String(pass ? pass : ""));
+            request->send(200, "application/json", "{\"status\":\"saved\"}");
+            delay(3000);
+            ESP.restart();
+        });
+
+    m_server.on("/api/wifi/forget", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        m_wifiManager.clearCredentials();
+        request->send(200, "application/json", "{\"status\":\"cleared\"}");
+    });
+}
+
+void WebServer::setupPortalRoutes() {
+    // Serve captive portal on all paths
+    m_server.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(200, "text/html", PORTAL_HTML);
+    });
+
+    m_server.on("/api/wifi/scan", HTTP_GET, [](AsyncWebServerRequest* request) {
+        int n = WiFi.scanNetworks();
+        JsonDocument doc;
+        JsonArray arr = doc["networks"].to<JsonArray>();
+        for (int i = 0; i < n; i++) {
+            JsonObject net = arr.add<JsonObject>();
+            net["ssid"] = WiFi.SSID(i);
+            net["rssi"] = WiFi.RSSI(i);
+            net["open"] = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN);
+        }
+        WiFi.scanDelete();
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    m_server.on("/api/wifi/config", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            String body;
+            for (size_t i = 0; i < len; i++) body += (char)data[i];
+            JsonDocument doc;
+            if (deserializeJson(doc, body)) { request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}"); return; }
+            const char* ssid = doc["ssid"];
+            const char* pass = doc["password"];
+            if (!ssid || strlen(ssid) == 0) { request->send(400, "application/json", "{\"error\":\"Missing ssid\"}"); return; }
+            m_wifiManager.saveCredentials(String(ssid), String(pass ? pass : ""));
+            request->send(200, "application/json", "{\"status\":\"saved\"}");
+            delay(3000);
+            ESP.restart();
+        });
+
+    // Captive portal redirect: any other path serves the portal
+    m_server.onNotFound([](AsyncWebServerRequest* request) {
+        request->redirect("/");
+    });
 }
 
 void WebServer::handleStatus(AsyncWebServerRequest* request) {
     JsonDocument doc;
     doc["wifi_ip"] = WiFi.localIP().toString();
     doc["wifi_rssi"] = WiFi.RSSI();
+    doc["hostname"] = String(MDNS_HOSTNAME) + ".local";
+    doc["ap_mode"] = m_wifiManager.isAPMode();
     doc["ble_connected"] = m_explorer.isConnected();
     doc["ble_scanning"] = m_explorer.isScanning();
     doc["heap_free"] = ESP.getFreeHeap();
@@ -290,6 +404,10 @@ void WebServer::handleSubscribe(AsyncWebServerRequest* request) {
 
 void WebServer::loop() {
     m_ws.cleanupClients();
+    m_wifiManager.loop();
+    if (!m_wifiManager.isAPMode()) {
+        ArduinoOTA.handle();
+    }
 
     int opVal = m_pendingOp.load(std::memory_order_acquire);
     if (opVal == (int)PendingOp::NONE) return;

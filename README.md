@@ -9,6 +9,9 @@ Inspired by [JamieMagee/specialized-turbo](https://github.com/JamieMagee/special
 - **BLE Scanner & Explorer** — Scan, connect, and browse GATT services/characteristics of any BLE device
 - **Giant RideControl+ Protocol** — Full implementation of the GEV BLE protocol (AES-128-ECB encrypted commands), reverse-engineered from the official Android app
 - **WiFi Web Server** — Browser-based SPA dashboard accessible over your local network
+- **mDNS Discovery** — Access at `http://giant-esp32.local`, no need to find the IP
+- **OTA Updates** — Flash firmware over WiFi after initial USB setup
+- **WiFi Manager** — Captive portal for WiFi setup, credentials stored in NVS, BOOT button to force AP mode
 - **Live Ride Dashboard** — Real-time speed, power, cadence, torque, battery, distance, and ride time
 - **Bike Controls** — Toggle light, adjust assist level, read factory/diagnostic info
 - **Ride Logger** — Record ride data to flash storage (LittleFS) as CSV, download when home via WiFi
@@ -28,16 +31,6 @@ Inspired by [JamieMagee/specialized-turbo](https://github.com/JamieMagee/special
 pip install platformio
 ```
 
-### Configure WiFi
-
-Create `src/credentials.h` (gitignored):
-
-```cpp
-#pragma once
-#define WIFI_SSID "YourSSID"
-#define WIFI_PASSWORD "YourPassword"
-```
-
 ### Build & Flash
 
 ```bash
@@ -52,6 +45,32 @@ pio run -e esp32s3 -t upload --upload-port /dev/cu.usbserial-*
 
 > **Tip**: If upload fails, hold **BOOT**, press **RESET**, release **BOOT**, then retry.
 
+### WiFi Setup
+
+**Option A: Captive Portal (recommended)**
+
+On first boot with no saved credentials, the ESP32 starts an AP called `Giant-ESP32-Setup`. Connect to it and a config portal opens automatically where you can select your WiFi network and enter the password.
+
+**Option B: credentials.h**
+
+Create `src/credentials.h` (gitignored):
+
+```cpp
+#pragma once
+#define WIFI_SSID "YourSSID"
+#define WIFI_PASSWORD "YourPassword"
+```
+
+> To force AP mode at any time, hold the **BOOT** button while pressing **RESET**.
+
+### OTA Updates
+
+After the initial USB flash, you can update over WiFi:
+
+```bash
+pio run -e esp32s3 -t upload --upload-port giant-esp32.local
+```
+
 ### Monitor Serial Output
 
 ```bash
@@ -62,7 +81,7 @@ pio device monitor
 
 ### Web Interface
 
-After flashing, the ESP32 connects to WiFi and prints its IP address to serial. Open that IP in a browser to access the dashboard.
+After flashing, the ESP32 connects to WiFi and is accessible at `http://giant-esp32.local` (via mDNS) or by IP address (shown on serial). Open it in a browser to access the dashboard.
 
 **BLE Explorer tab:**
 - Scan for nearby BLE devices
@@ -127,6 +146,10 @@ Protocol details were reverse-engineered from the [RideControl+ Android app](htt
 | `/api/rides/stop` | POST | Stop recording |
 | `/api/rides/download?file=X` | GET | Download ride CSV |
 | `/api/rides/delete?file=X` | DELETE | Delete a ride |
+| `/api/wifi/status` | GET | WiFi mode, IP, credentials status |
+| `/api/wifi/config` | POST | Save WiFi credentials `{"ssid":"...","password":"..."}` |
+| `/api/wifi/forget` | POST | Clear saved WiFi credentials |
+| `/api/wifi/scan` | GET | Scan for WiFi networks (AP mode) |
 
 ## References
 

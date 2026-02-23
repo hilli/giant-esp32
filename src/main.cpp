@@ -11,11 +11,21 @@
 #include <Arduino.h>
 #include <esp_task_wdt.h>
 #include "config.h"
-#include "credentials.h"
 #include "ble_explorer.h"
 #include "web_server.h"
 #include "giant_protocol.h"
 #include "ride_logger.h"
+
+// Optional: compile-time WiFi fallback from credentials.h
+#if __has_include("credentials.h")
+#include "credentials.h"
+#endif
+#ifndef WIFI_SSID
+#define WIFI_SSID ""
+#endif
+#ifndef WIFI_PASSWORD
+#define WIFI_PASSWORD ""
+#endif
 
 BLEExplorer explorer;
 WebServer webServer(explorer);
@@ -243,16 +253,20 @@ void setup() {
     // Start WiFi + Web Server
     webServer.begin(WIFI_SSID, WIFI_PASSWORD);
 
-    // Sync time via NTP and init ride logger
-    RideLogger::syncNTP();
-    rideLogger.init();
-    webServer.setRideLogger(&rideLogger);
+    // Only init ride logger and NTP when connected to WiFi
+    if (!webServer.getWiFiManager().isAPMode()) {
+        RideLogger::syncNTP();
+        rideLogger.init();
+        webServer.setRideLogger(&rideLogger);
 
-    printHelp();
+        printHelp();
 
-    // Auto-start scan
-    Serial.println("[BLE] Starting initial scan...\n");
-    explorer.startScan(BLE_SCAN_DURATION);
+        // Auto-start scan
+        Serial.println("[BLE] Starting initial scan...\n");
+        explorer.startScan(BLE_SCAN_DURATION);
+    } else {
+        Serial.println("[WiFi] In AP mode — configure WiFi via the captive portal");
+    }
 }
 
 void loop() {
