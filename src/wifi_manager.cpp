@@ -35,9 +35,12 @@ bool WiFiManager::begin(const char* fallbackSsid, const char* fallbackPassword) 
         return false;
     }
 
+    bool hadCredentials = false;
+
     // Try NVS credentials first
     String ssid, password;
     if (loadCredentials(ssid, password)) {
+        hadCredentials = true;
         Serial.printf("[WiFi] Trying saved network: %s\n", ssid.c_str());
         if (tryConnect(ssid, password)) return true;
         Serial.println("[WiFi] Saved credentials failed");
@@ -45,12 +48,19 @@ bool WiFiManager::begin(const char* fallbackSsid, const char* fallbackPassword) 
 
     // Try fallback (from credentials.h)
     if (fallbackSsid && strlen(fallbackSsid) > 0) {
+        hadCredentials = true;
         Serial.printf("[WiFi] Trying fallback network: %s\n", fallbackSsid);
         if (tryConnect(String(fallbackSsid), String(fallbackPassword ? fallbackPassword : ""))) return true;
         Serial.println("[WiFi] Fallback credentials failed");
     }
 
-    // All attempts failed — start AP mode
+    // Credentials existed but network unreachable → ride mode
+    if (hadCredentials) {
+        startRideMode();
+        return false;
+    }
+
+    // No credentials at all → AP captive portal for initial setup
     startAPMode();
     return false;
 }
@@ -113,6 +123,22 @@ void WiFiManager::startAPMode() {
     Serial.println("[WiFi] ========================================");
     Serial.printf("[WiFi] AP Mode: Connect to \"%s\"\n", AP_SSID);
     Serial.printf("[WiFi] Portal: http://%s/\n", WiFi.softAPIP().toString().c_str());
+    Serial.println("[WiFi] ========================================");
+}
+
+void WiFiManager::startRideMode() {
+    m_apMode = true;
+    m_rideMode = true;
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(RIDE_AP_SSID);
+    delay(100);
+
+    // DNS redirect: resolve all hostnames to AP IP (needed for captive portal bypass)
+    dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+
+    Serial.println("[WiFi] ========================================");
+    Serial.printf("[WiFi] Ride Mode: Connect to \"%s\"\n", RIDE_AP_SSID);
+    Serial.printf("[WiFi] Web UI: http://%s/\n", WiFi.softAPIP().toString().c_str());
     Serial.println("[WiFi] ========================================");
 }
 

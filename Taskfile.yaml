@@ -16,12 +16,18 @@ tasks:
 
   build:
     desc: Build firmware
+    sources:
+      - src/**/*
+      - platformio.ini
+    generates:
+      - .pio/build/{{.ENV}}/firmware.bin
     cmds:
       - '{{.PIO}} run -e {{.ENV}}'
 
   flash:
     desc: Build and flash firmware to ESP32
     cmds:
+      - task: build
       - '{{.PIO}} run -e {{.ENV}} -t upload --upload-port {{.UPLOAD_PORT}}'
 
   monitor:

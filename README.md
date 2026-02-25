@@ -21,7 +21,7 @@ Inspired by [JamieMagee/specialized-turbo](https://github.com/JamieMagee/special
 
 ## Hardware
 
-- **Board**: ESP32-S3-WROOM-1 (any ESP32-S3 dev board)
+- **Board**: ESP32-S3-WROOM-1 (any ESP32-S3 dev board will probably do)
 - **Target bike**: Giant Stormguard E+ 2 (2023) or similar Giant e-bikes with RideControl+
 
 ## Quick Start
@@ -63,6 +63,18 @@ Create `src/credentials.h` (gitignored):
 ```
 
 > To force AP mode at any time, hold the **BOOT** button while pressing **RESET**.
+
+### Ride Mode
+
+When saved WiFi credentials exist but the network is unreachable (e.g., you're out on a ride), the ESP32 automatically enters **ride mode**:
+
+- Creates an AP called `Giant-ESP32-Ride` — connect your phone to this network
+- Serves the full web UI at `http://192.168.4.1`
+- Initializes BLE, auto-scans, auto-connects to the bike, and starts recording
+- Press the **BOOT** button to toggle ride recording on/off
+- LED shows alternating green/blue while waiting for BLE connection
+
+> Ride mode activates automatically — no configuration needed. Just power on the ESP32 away from your home WiFi.
 
 ### OTA Updates
 

@@ -22,3 +22,7 @@
 
 // mDNS hostname — access at http://MDNS_HOSTNAME.local
 #define MDNS_HOSTNAME "giant-esp32"
+
+// Ride mode — AP with full web UI when saved WiFi is unreachable
+#define RIDE_AP_SSID "Giant-ESP32-Ride"
+#define RIDE_AUTO_RECORD true

@@ -6,7 +6,7 @@
 class WiFiManager {
 public:
     // Try connecting with NVS credentials, then fallback defines, then AP mode.
-    // Returns true if connected to STA, false if in AP mode.
+    // Returns true if connected to STA, false if in AP or ride mode.
     bool begin(const char* fallbackSsid = nullptr, const char* fallbackPassword = nullptr);
 
     // Save credentials to NVS
@@ -21,8 +21,14 @@ public:
     // Start AP mode with captive portal
     void startAPMode();
 
-    // Is the device currently in AP mode?
+    // Start ride mode — AP with full web UI, no captive portal
+    void startRideMode();
+
+    // Is the device currently in AP mode? (true for both AP and ride mode)
     bool isAPMode() const { return m_apMode; }
+
+    // Is the device in ride mode? (AP + full functionality)
+    bool isRideMode() const { return m_rideMode; }
 
     // Check if BOOT button (GPIO0) is held during startup
     static bool isBootButtonHeld(unsigned long holdMs = 2000);
@@ -33,4 +39,5 @@ public:
 private:
     bool tryConnect(const String& ssid, const String& password, int maxRetries = 30);
     bool m_apMode = false;
+    bool m_rideMode = false;
 };

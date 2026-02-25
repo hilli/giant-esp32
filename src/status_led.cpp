@@ -6,7 +6,7 @@
 void StatusLed::init() {
     pinMode(LED_PIN, OUTPUT);
     off();
-    Serial.println("[LED] Status LED initialized on GPIO 48");
+    Serial.println("[LED] Status LED initialized on GPIO 38");
 }
 
 void StatusLed::setColor(uint8_t r, uint8_t g, uint8_t b) {
@@ -48,6 +48,15 @@ void StatusLed::loop() {
                 if (_brightness >= 50) _breathDir = -1;
                 if (_brightness <= 0) { _breathDir = 1; _brightness = 0; }
                 setColor(_brightness, _brightness / 2, 0);
+            }
+            break;
+
+        case LedState::RIDE_MODE:
+            // Alternating green/blue blink 1Hz
+            if (now - _lastMs > 500) {
+                _lastMs = now;
+                _on = !_on;
+                if (_on) setColor(0, 30, 0); else setColor(0, 0, 30);
             }
             break;
 

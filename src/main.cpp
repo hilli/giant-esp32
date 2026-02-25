@@ -37,6 +37,7 @@ RideLogger rideLogger;
 Webhook webhook;
 ChargeMonitor chargeMonitor(webhook);
 StatusLed statusLed;
+bool inRideMode = false;
 
 // Track the best candidate during scanning
 NimBLEAddress targetAddress;
@@ -104,6 +105,12 @@ class MyCallbacks : public BLEExplorerCallbacks {
             if (giantBike->init()) {
                 webServer.setGiantBike(giantBike);
                 Serial.println("[GEV] Protocol ready via web UI");
+
+                // Auto-start recording in ride mode
+                if (inRideMode && RIDE_AUTO_RECORD && !rideLogger.isLogging()) {
+                    rideLogger.start();
+                    Serial.println("[LOG] Auto-started ride recording (ride mode)");
+                }
             } else {
                 Serial.println("[GEV] Protocol init failed");
                 delete giantBike;
@@ -265,10 +272,13 @@ void setup() {
 
     // Start WiFi + Web Server
     webServer.begin(WIFI_SSID, WIFI_PASSWORD);
+    inRideMode = webServer.getWiFiManager().isRideMode();
 
-    // Only init subsystems when connected to WiFi
-    if (!webServer.getWiFiManager().isAPMode()) {
-        RideLogger::syncNTP();
+    // Only init subsystems when connected to WiFi or in ride mode
+    if (!webServer.getWiFiManager().isAPMode() || inRideMode) {
+        if (!inRideMode) {
+            RideLogger::syncNTP();
+        }
         rideLogger.init();
         webServer.setRideLogger(&rideLogger);
 
@@ -281,7 +291,7 @@ void setup() {
         // Auto-start scan
         Serial.println("[BLE] Starting initial scan...\n");
         explorer.startScan(BLE_SCAN_DURATION);
-        statusLed.setState(LedState::SCANNING);
+        statusLed.setState(inRideMode ? LedState::RIDE_MODE : LedState::SCANNING);
     } else {
         Serial.println("[WiFi] In AP mode — configure WiFi via the captive portal");
         statusLed.setState(LedState::WIFI_AP);
@@ -295,11 +305,30 @@ void loop() {
     chargeMonitor.loop(giantBike);
     statusLed.loop();
 
+    // BOOT button toggles recording in ride mode
+    if (inRideMode) {
+        static bool lastButtonState = HIGH;
+        static unsigned long lastDebounce = 0;
+        bool buttonState = digitalRead(0);
+        if (buttonState == LOW && lastButtonState == HIGH && (millis() - lastDebounce > 200)) {
+            lastDebounce = millis();
+            if (rideLogger.isLogging()) {
+                rideLogger.stop();
+                Serial.println("[LOG] Recording stopped (button)");
+            } else if (giantBike) {
+                rideLogger.start();
+                Serial.println("[LOG] Recording started (button)");
+            }
+        }
+        lastButtonState = buttonState;
+    }
+
     // Update LED for recording state
     if (rideLogger.isLogging() && statusLed.getState() != LedState::RECORDING) {
         statusLed.setState(LedState::RECORDING);
     } else if (!rideLogger.isLogging() && statusLed.getState() == LedState::RECORDING) {
-        statusLed.setState(explorer.isConnected() ? LedState::CONNECTED : LedState::IDLE);
+        statusLed.setState(explorer.isConnected() ? LedState::CONNECTED :
+                          (inRideMode ? LedState::RIDE_MODE : LedState::IDLE));
     }
 
     // Auto-connect if target found during scan

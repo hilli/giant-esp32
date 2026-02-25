@@ -2,12 +2,13 @@
 
 #include <Arduino.h>
 
-// ESP32-S3-DevKitC-1 onboard RGB LED (WS2812) on GPIO 48
-#define LED_PIN 48
+// ESP32-S3 onboard RGB LED (WS2812) — GPIO 48 on DevKitC-1, GPIO 38 on some variants
+#define LED_PIN 38
 
 enum class LedState {
     BOOT,       // white pulse
     WIFI_AP,    // yellow breathe
+    RIDE_MODE,  // alternating green/blue blink
     IDLE,       // dim blue
     SCANNING,   // blue blink
     CONNECTED,  // solid green

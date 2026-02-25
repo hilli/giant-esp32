@@ -11,7 +11,7 @@ WebServer::WebServer(BLEExplorer& explorer, uint16_t port)
 void WebServer::begin(const char* ssid, const char* password) {
     bool connected = m_wifiManager.begin(ssid, password);
 
-    if (connected) {
+    if (connected || m_wifiManager.isRideMode()) {
         // mDNS — access at http://MDNS_HOSTNAME.local
         if (MDNS.begin(MDNS_HOSTNAME)) {
             MDNS.addService("http", "tcp", 80);
@@ -19,8 +19,10 @@ void WebServer::begin(const char* ssid, const char* password) {
         } else {
             Serial.println("[mDNS] Failed to start");
         }
+    }
 
-        // OTA updates
+    if (connected) {
+        // OTA updates (STA mode only — needs internet)
         ArduinoOTA.setHostname(MDNS_HOSTNAME);
         ArduinoOTA.onStart([]() { Serial.println("[OTA] Update starting..."); });
         ArduinoOTA.onEnd([]() { Serial.println("\n[OTA] Update complete, rebooting"); });
@@ -49,14 +51,43 @@ void WebServer::begin(const char* ssid, const char* password) {
     });
     m_server.addHandler(&m_ws);
 
-    if (m_wifiManager.isAPMode()) {
+    if (m_wifiManager.isAPMode() && !m_wifiManager.isRideMode()) {
         setupPortalRoutes();
     } else {
         setupRoutes();
     }
+
+    // In ride mode, add captive portal bypass so iOS/Android stay connected
+    if (m_wifiManager.isRideMode()) {
+        // iOS / macOS
+        m_server.on("/hotspot-detect.html", HTTP_GET, [](AsyncWebServerRequest* request) {
+            request->send(200, "text/html", "Success");
+        });
+        m_server.on("/library/test/success.html", HTTP_GET, [](AsyncWebServerRequest* request) {
+            request->send(200, "text/html", "Success");
+        });
+        // Android
+        m_server.on("/generate_204", HTTP_GET, [](AsyncWebServerRequest* request) {
+            request->send(204, "text/plain", "");
+        });
+        m_server.on("/gen_204", HTTP_GET, [](AsyncWebServerRequest* request) {
+            request->send(204, "text/plain", "");
+        });
+        // Windows
+        m_server.on("/ncsi.txt", HTTP_GET, [](AsyncWebServerRequest* request) {
+            request->send(200, "text/plain", "Microsoft NCSI");
+        });
+        m_server.on("/connecttest.txt", HTTP_GET, [](AsyncWebServerRequest* request) {
+            request->send(200, "text/plain", "Microsoft Connect Test");
+        });
+    }
+
     m_server.begin();
 
-    if (m_wifiManager.isAPMode()) {
+    if (m_wifiManager.isRideMode()) {
+        Serial.printf("[Web] Ride mode UI at http://%s/ | http://%s.local/\n",
+                      WiFi.softAPIP().toString().c_str(), MDNS_HOSTNAME);
+    } else if (m_wifiManager.isAPMode()) {
         Serial.printf("[Web] Portal started at http://%s/\n", WiFi.softAPIP().toString().c_str());
     } else {
         Serial.printf("[Web] Server started at http://%s/ | http://%s.local/\n",
